@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+
+# build artifacts
+build/
+dist/
+*.egg-info/
+Save the file.
+

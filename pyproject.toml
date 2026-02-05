@@ -1,0 +1,14 @@
+[project]
+name = "ai-recommendation-service"
+version = "0.1.0"
+description = "Production-style recommendation microservice"
+requires-python = ">=3.10"
+
+dependencies = [
+  "fastapi",
+  "uvicorn[standard]",
+  "pydantic",
+]
+
+[tool.uvicorn]
+factory = false
