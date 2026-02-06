@@ -1,10 +1,12 @@
 from typing import List
 from app.schemas.recommendation import RecommendationItem
+from app.services.candidate_generator import CandidateGenerator
 
 
 def generate_recommendations(user_id: int, limit: int) -> List[RecommendationItem]:
-    """
-    Core recommendation logic.
-    For now, returns an empty list.
-    """
-    return []
+    generator = CandidateGenerator()
+    candidates = generator.generate(user_id=user_id, limit=limit)
+
+    return candidates
+
+
