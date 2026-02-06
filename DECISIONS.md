@@ -1,57 +1,76 @@
-1. Use FastAPI instead of Flask
+Use FastAPI over Flask
 
-# Why
+Decision:
+Use FastAPI to build the recommendation service API.
 
-Native async support (better for I/O-heavy services)
+Why:
+Native async support, strong typing, automatic request/response validation, and built-in API docs.
 
-Strong typing with Python type hints
+Tradeoff:
+Slightly steeper learning curve compared to Flask.
 
-Automatic request validation via Pydantic
+Use Uvicorn with app.main:app
 
-Built-in OpenAPI docs
+Decision:
+Run the service using Uvicorn pointing to app.main:app.
 
-Tradeoff
+Why:
+Explicit entry point makes the application startup predictable and production-ready.
 
-Slightly steeper learning curve than Flask
+Tradeoff:
+Requires understanding module paths and ASGI concepts.
 
-2. Run app using uvicorn app.main:app
+Use routers to compose endpoints
 
-Why
+Decision:
+Split endpoints using FastAPI routers (health, recommendations).
 
-Uvicorn is an ASGI server designed for async frameworks
+Why:
+Keeps APIs modular, versionable, and easy to scale as the service grows.
 
-app.main:app explicitly defines the application entry point
+Tradeoff:
+More files and structure upfront.
 
-Same startup pattern works for local, Docker, and production
+Separate domain logic from API layer
 
-Tradeoff
+Decision:
+Place core recommendation logic in the domain layer, independent of FastAPI.
 
-Requires understanding Python module imports
+Why:
+Business logic stays reusable, testable, and independent of transport concerns.
 
-3. Use APIRouter for endpoint composition
+Tradeoff:
+Adds an extra abstraction layer.
 
-Why
+Introduce services for execution logic
 
-Clean separation of API domains
+Decision:
+Move candidate generation into a services layer, orchestrated by the domain.
 
-Easy versioning (/v1, /v2)
+Why:
+Separates what the business wants from how it is implemented (rules, ML, infra).
 
-Scales well as the codebase grows
+Tradeoff:
+Initial implementation may feel verbose for simple logic.
 
-Tradeoff
+Use Pydantic schemas for request/response models
 
-More files and indirection
+Decision:
+Define request and response contracts using Pydantic models.
 
-4. Use pydantic-settings for configuration
+Why:
+Strong typing, automatic validation, and clear API contracts.
 
-Why
+Tradeoff:
+Requires maintaining schema definitions alongside logic.
 
-Separates config from data models
+Use domain-specific exceptions
 
-Aligns with Pydantic v2 design
+Decision:
+Define semantic exceptions in the domain and map them to HTTP errors in the API.
 
-Cleaner and more maintainable config handling
+Why:
+Keeps business logic free of HTTP concerns and enables consistent error handling.
 
-Tradeoff
-
-Extra dependency
+Tradeoff:
+Requires explicit exception handling in API layer.
