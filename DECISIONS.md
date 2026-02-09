@@ -1,3 +1,5 @@
+> This document captures architectural decisions made while building the AI Recommendation Service, along with rationale and tradeoffs.
+
 # Use FastAPI over Flask
 
 Decision:
@@ -74,3 +76,81 @@ Keeps business logic free of HTTP concerns and enables consistent error handling
 
 Tradeoff:
 Requires explicit exception handling in API layer.
+
+
+# Use SQLAlchemy ORM for persistence
+
+Decision:
+Use SQLAlchemy ORM to model and interact with the Postgres database.
+
+Why:
+Provides a mature, Pythonic abstraction over SQL with strong ecosystem support and clean separation between schema, queries, and sessions.
+
+Tradeoff:
+Requires understanding ORM patterns and session lifecycle.
+
+# Use per-request DB sessions via dependency injection
+
+Decision:
+Create a `get_db` dependency to provide one database session per API request.
+
+Why:
+Prevents connection leaks, ensures transactional safety, and keeps DB lifecycle management out of routes.
+
+Tradeoff:
+Adds an extra dependency layer that must be wired correctly.
+
+# Separate database access using repository pattern
+
+Decision:
+Introduce repositories (e.g., `ProductRepository`) to encapsulate all database queries.
+
+Why:
+Prevents ORM leakage into business logic and APIs, improves testability, and localizes data access changes.
+
+Tradeoff:
+Adds an additional abstraction layer for simple CRUD operations.
+
+# Introduce service layer for business use cases
+
+Decision:
+Add a service layer (e.g., `ProductService`) to orchestrate repositories and apply business rules.
+
+Why:
+Keeps business logic centralized and prevents API handlers from becoming complex or stateful.
+
+Tradeoff:
+May feel thin initially until business rules grow.
+
+# Use Postgres via Docker for local development
+
+Decision:
+Run Postgres locally using Docker instead of installing it directly on the system.
+
+Why:
+Ensures consistent local setup, mirrors production environments, and avoids system-level conflicts.
+
+Tradeoff:
+Requires basic Docker familiarity.
+
+# Use seed scripts for initial data population
+
+Decision:
+Seed sample data using standalone scripts instead of hardcoding data in APIs or services.
+
+Why:
+Keeps runtime code clean and makes local development and testing repeatable.
+
+Tradeoff:
+Requires maintaining scripts alongside schema changes.
+
+# Keep API layer thin and orchestration-only
+
+Decision:
+Limit API handlers to request parsing, dependency wiring, and response formatting.
+
+Why:
+Maintains clear separation of concerns and keeps HTTP as a transport layer only.
+
+Tradeoff:
+More indirection compared to monolithic handlers.
