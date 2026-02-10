@@ -154,3 +154,14 @@ Maintains clear separation of concerns and keeps HTTP as a transport layer only.
 
 Tradeoff:
 More indirection compared to monolithic handlers.
+
+# Centralized SQLAlchemy model registration
+
+Decision:
+Register all ORM models via a single `app.models` import before metadata creation.
+
+Why:
+SQLAlchemy only creates tables it knows about at runtime; centralized imports ensure foreign keys resolve correctly.
+
+Tradeoff:
+Requires maintaining a central model registry file.

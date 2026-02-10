@@ -1,10 +1,4 @@
-from app.db.session import engine
-from app.db.base import Base
-
-# Import ALL models so SQLAlchemy registers them
 from app.models.product import Product
 from app.models.user import User
 from app.models.recommendation import Recommendation
 from app.models.feedback import Feedback
-
-Base.metadata.create_all(bind=engine)
