@@ -11,3 +11,7 @@ def get(key: str):
 
 def set(key: str, value, ttl: int = 3600):
     redis_client.set(key, json.dumps(value), ex=ttl)
+
+def delete(key: str):
+    redis_client.delete(key)
+

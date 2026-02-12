@@ -3,6 +3,7 @@ from app.config import settings
 from app.api.v1.health import router as health_router
 from app.api.v1.recommendations import router as recommendations_router
 from app.api.v1.products import router as products_router
+from app.api.v1.feedback import router as feedback_router
 
 
 def create_app() -> FastAPI:
@@ -18,6 +19,7 @@ def create_app() -> FastAPI:
         tags=["recommendations"],
     )
     app.include_router(products_router, prefix="/v1")
+    app.include_router(feedback_router)
 
     return app
 
