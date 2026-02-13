@@ -165,3 +165,11 @@ SQLAlchemy only creates tables it knows about at runtime; centralized imports en
 
 Tradeoff:
 Requires maintaining a central model registry file.
+
+# Use Cache-Aside pattern for recommendations
+
+Decision:
+Implement Redis caching using the cache-aside pattern for recommendation reads.
+
+Why:
+Reduces database load, improves response time, and keeps the read path simple and predictable. Cache-aside allows the application to control when data is
