@@ -1,7 +1,6 @@
 from app.repositories.recommendation_repository import RecommendationRepository
 from app.repositories.product_repository import ProductRepository
-from app.cache.redis_client import get, set
-
+from app.cache.redis_client import get, set, delete
 
 class RecommendationService:
     def __init__(
@@ -14,10 +13,18 @@ class RecommendationService:
 
     def generate(self, user_id: int):
         cache_key = f"recommendations:{user_id}"
+        lock_key = f"lock:recommendations:{user_id}"
+
+        # prevent duplicate jobs
+        if get(lock_key):
+            return
+
+        set(lock_key, "1", ttl=120)
 
         cached = get(cache_key)
         if cached:
-            return {"source": "cache", "items": cached}
+            delete(lock_key)
+            return
 
         products = self.product_repo.list_products(limit=5)
         product_ids = [p.id for p in products]
@@ -28,4 +35,4 @@ class RecommendationService:
         # Save in cache (1 hour TTL)
         set(cache_key, product_ids, ttl=3600)
 
-        return {"source": "db", "items": product_ids}
+        delete(lock_key)

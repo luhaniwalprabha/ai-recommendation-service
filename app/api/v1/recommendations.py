@@ -7,19 +7,26 @@ from app.services.recommendation_service import RecommendationService
 from app.schemas.recommendation import RecommendationResponse
 from app.domain.recommendation import generate_recommendations
 from app.domain.exceptions import InvalidUserError, RecommendationError
+from app.cache.redis_client import get
+
 
 
 router = APIRouter(tags=["recommendations"])
 
 @router.post("")
 def recommend(user_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db),):
+    cache_key = f"recommendations:{user_id}"
+
+    if get(cache_key):
+        return {"status": "ready", "source": "cache"}
+
     product_repo = ProductRepository(db)
     rec_repo = RecommendationRepository(db)
     service = RecommendationService(rec_repo, product_repo)
 
     background_tasks.add_task(service.generate, user_id)
 
-    return {"status": "recommendation generation scheduled"}
+    return {"status": "processing"}
 
 
 

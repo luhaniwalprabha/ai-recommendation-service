@@ -172,4 +172,62 @@ Decision:
 Implement Redis caching using the cache-aside pattern for recommendation reads.
 
 Why:
-Reduces database load, improves response time, and keeps the read path simple and predictable. Cache-aside allows the application to control when data is
+Reduces database load, improves response time, and keeps the read path simple and predictable. Cache-aside allows the application to control when data is refreshed and ensures recommendations are recomputed only when necessary.
+
+Tradeoff:
+Requires explicit cache invalidation and consistency management when underlying data changes.
+
+# Invalidate cache on feedback events
+
+Decision:
+Invalidate user recommendation cache when feedback (click, like, purchase) is recorded.
+
+Why:
+Ensures recommendations reflect the latest user behavior and prevents stale personalization.
+
+Tradeoff:
+Increases cache churn for highly active users.
+
+# Generate recommendations asynchronously using background tasks
+
+Decision:
+Offload recommendation generation to background tasks instead of processing synchronously within the request.
+
+Why:
+Prevents blocking API responses, improves responsiveness, and mirrors real-world systems where recommendation computation can be expensive.
+
+Tradeoff:
+Adds complexity in job coordination and requires cache/state management for asynchronous results.
+
+# Check cache before scheduling recommendation generation
+
+Decision:
+Verify Redis cache before scheduling a background generation task.
+
+Why:
+Prevents unnecessary background jobs when recommendations are already available, reducing compute usage and improving performance.
+
+Tradeoff:
+Requires reliable cache invalidation to ensure freshness.
+
+# Prevent duplicate recommendation generation using Redis locks
+
+Decision:
+Use a Redis-based lock (lock:recommendations:{user_id}) to ensure only one background job generates recommendations per user at a time.
+
+Why:
+Multiple rapid requests can schedule duplicate background jobs, causing redundant computation, race conditions, and cache churn. A short-lived lock ensures only one job runs.
+
+Tradeoff:
+Requires careful TTL configuration to prevent stale locks if a worker crashes.
+
+# Ensure idempotent recommendation generation
+
+Decision:
+Re-check cache state inside the background worker before recomputing recommendations.
+
+Why:
+Prevents stale or duplicate background jobs from overwriting fresh results when concurrent requests occur.
+
+Tradeoff:
+Adds an extra cache lookup but significantly improves correctness and resilience.
