@@ -19,3 +19,10 @@ class RecommendationRepository:
             .order_by(Recommendation.created_at.desc())
             .first()
         )
+    
+    def latest_items(self, user_id: int):
+        rec = self.latest_for_user(user_id)
+        if rec:
+            return rec.items
+        return None
+

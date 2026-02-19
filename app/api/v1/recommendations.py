@@ -24,8 +24,15 @@ def recommend(user_id: int, background_tasks: BackgroundTasks, db: Session = Dep
     rec_repo = RecommendationRepository(db)
     service = RecommendationService(rec_repo, product_repo)
 
-    background_tasks.add_task(service.generate, user_id)
+    # try stale DB result
+    stale = rec_repo.latest_items(user_id)
 
+    if stale:
+        background_tasks.add_task(service.generate, user_id)
+        return {"source": "stale", "items": stale}
+
+    # no stale data → schedule generation
+    background_tasks.add_task(service.generate, user_id)
     return {"status": "processing"}
 
 

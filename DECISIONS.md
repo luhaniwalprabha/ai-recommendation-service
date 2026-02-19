@@ -231,3 +231,14 @@ Prevents stale or duplicate background jobs from overwriting fresh results when 
 
 Tradeoff:
 Adds an extra cache lookup but significantly improves correctness and resilience.
+
+# Use stale-while-revalidate strategy for recommendations
+
+Decision:
+Return cached recommendations when available. On cache miss, return the latest stored recommendations while triggering background regeneration.
+
+Why:
+Ensures users always receive results immediately while freshness improves asynchronously.
+
+Tradeoff:
+Users may briefly see slightly outdated recommendations, and the read path becomes slightly more complex.
