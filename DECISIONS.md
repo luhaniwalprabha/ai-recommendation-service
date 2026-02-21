@@ -242,3 +242,14 @@ Ensures users always receive results immediately while freshness improves asynch
 
 Tradeoff:
 Users may briefly see slightly outdated recommendations, and the read path becomes slightly more complex.
+
+# Implement liveness and readiness checks for dependency-aware service health
+
+Decision:
+Expose separate `/health` (liveness) and `/ready` (readiness) endpoints. `/ready` verifies PostgreSQL connectivity (`SELECT 1`) and Redis connectivity (`PING`) before marking the service ready.
+
+Why:
+Prevents traffic from reaching instances that cannot access critical dependencies and aligns with Kubernetes readiness/liveness probe best practices for safe deployments and autoscaling.
+
+Tradeoff:
+Adds small latency and dependency checks to the readiness path, and misconfigured dependencies can temporarily keep instances out of rotation.

@@ -12,7 +12,7 @@ def create_app() -> FastAPI:
         version="1.0.0",
     )
 
-    app.include_router(health_router, prefix="/health", tags=["health"])
+    app.include_router(health_router, prefix="/api/v1")
     app.include_router(
         recommendations_router,
         prefix="/v1/recommendations",
