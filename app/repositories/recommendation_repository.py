@@ -1,11 +1,14 @@
 from sqlalchemy.orm import Session
 from app.models.recommendation import Recommendation
+from app.core.logging import get_logger
+logger = get_logger(__name__)
 
 class RecommendationRepository:
     def __init__(self, db: Session):
         self.db = db
 
     def save(self, user_id: int, items: list[int]):
+        logger.info("Saving recommendations to database")
         rec = Recommendation(user_id=user_id, items=items)
         self.db.add(rec)
         self.db.commit()

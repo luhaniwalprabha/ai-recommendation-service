@@ -253,3 +253,14 @@ Prevents traffic from reaching instances that cannot access critical dependencie
 
 Tradeoff:
 Adds small latency and dependency checks to the readiness path, and misconfigured dependencies can temporarily keep instances out of rotation.
+
+# Add request logging middleware for observability
+
+Decision:
+Register a custom LoggingMiddleware in app/main.py to log incoming requests, response status, and processing time. Use the centralized logger (get_logger) within services to record key events.
+
+Why:
+Provides visibility into API behavior, helps debug issues, and enables performance monitoring without scattering print statements across the codebase.
+
+Tradeoff:
+Adds minor processing overhead and increases log volume, requiring log level control and future log aggregation.

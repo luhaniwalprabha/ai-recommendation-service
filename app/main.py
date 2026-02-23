@@ -4,6 +4,8 @@ from app.api.v1.health import router as health_router
 from app.api.v1.recommendations import router as recommendations_router
 from app.api.v1.products import router as products_router
 from app.api.v1.feedback import router as feedback_router
+from app.middleware.logging_middleware import LoggingMiddleware
+
 
 
 def create_app() -> FastAPI:
@@ -25,3 +27,4 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+app.add_middleware(LoggingMiddleware)
