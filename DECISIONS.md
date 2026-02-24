@@ -1,266 +1,326 @@
-> This document captures architectural decisions made while building the AI Recommendation Service, along with rationale and tradeoffs.
+> This document captures architectural decisions made while building the AI Recommendation Service, including rationale and tradeoffs.
 
-# Use FastAPI over Flask
+---
+
+## API & Framework Decisions
+
+### Use FastAPI over Flask
 
 Decision:
 Use FastAPI to build the recommendation service API.
 
 Why:
-Native async support, strong typing, automatic request/response validation, and built-in API docs.
+Provides native async support, strong typing, automatic validation, and interactive API documentation.
 
 Tradeoff:
 Slightly steeper learning curve compared to Flask.
 
-# Use Uvicorn with app.main:app
+---
+
+### Use Uvicorn with `app.main:app`
 
 Decision:
-Run the service using Uvicorn pointing to app.main:app.
+Run the service using Uvicorn with an explicit ASGI entry point.
 
 Why:
-Explicit entry point makes the application startup predictable and production-ready.
+Ensures predictable startup behavior and production readiness.
 
 Tradeoff:
-Requires understanding module paths and ASGI concepts.
+Requires familiarity with ASGI and module paths.
 
-# Use routers to compose endpoints
+---
+
+### Compose endpoints using routers
 
 Decision:
-Split endpoints using FastAPI routers (health, recommendations).
+Organize endpoints using FastAPI routers (health, recommendations).
 
 Why:
-Keeps APIs modular, versionable, and easy to scale as the service grows.
+Improves modularity, versioning, and scalability.
 
 Tradeoff:
-More files and structure upfront.
+Introduces additional structure upfront.
 
-# Separate domain logic from API layer
+---
+
+## Architecture & Layering
+
+### Separate domain logic from API layer
 
 Decision:
-Place core recommendation logic in the domain layer, independent of FastAPI.
+Keep recommendation logic in the domain layer independent of FastAPI.
 
 Why:
-Business logic stays reusable, testable, and independent of transport concerns.
+Ensures business logic remains reusable, testable, and transport-agnostic.
 
 Tradeoff:
-Adds an extra abstraction layer.
+Adds an additional abstraction layer.
 
-# Introduce services for execution logic
+---
+
+### Introduce service layer for orchestration
 
 Decision:
-Move candidate generation into a services layer, orchestrated by the domain.
+Use a service layer to coordinate repositories, caching, and recommendation generation.
 
 Why:
-Separates what the business wants from how it is implemented (rules, ML, infra).
+Separates business intent from implementation details and supports future ML/infra expansion.
 
 Tradeoff:
-Initial implementation may feel verbose for simple logic.
+May feel verbose early in development.
 
-# Use Pydantic schemas for request/response models
+---
 
-Decision:
-Define request and response contracts using Pydantic models.
-
-Why:
-Strong typing, automatic validation, and clear API contracts.
-
-Tradeoff:
-Requires maintaining schema definitions alongside logic.
-
-# Use domain-specific exceptions
-
-Decision:
-Define semantic exceptions in the domain and map them to HTTP errors in the API.
-
-Why:
-Keeps business logic free of HTTP concerns and enables consistent error handling.
-
-Tradeoff:
-Requires explicit exception handling in API layer.
-
-
-# Use SQLAlchemy ORM for persistence
-
-Decision:
-Use SQLAlchemy ORM to model and interact with the Postgres database.
-
-Why:
-Provides a mature, Pythonic abstraction over SQL with strong ecosystem support and clean separation between schema, queries, and sessions.
-
-Tradeoff:
-Requires understanding ORM patterns and session lifecycle.
-
-# Use per-request DB sessions via dependency injection
-
-Decision:
-Create a `get_db` dependency to provide one database session per API request.
-
-Why:
-Prevents connection leaks, ensures transactional safety, and keeps DB lifecycle management out of routes.
-
-Tradeoff:
-Adds an extra dependency layer that must be wired correctly.
-
-# Separate database access using repository pattern
-
-Decision:
-Introduce repositories (e.g., `ProductRepository`) to encapsulate all database queries.
-
-Why:
-Prevents ORM leakage into business logic and APIs, improves testability, and localizes data access changes.
-
-Tradeoff:
-Adds an additional abstraction layer for simple CRUD operations.
-
-# Introduce service layer for business use cases
-
-Decision:
-Add a service layer (e.g., `ProductService`) to orchestrate repositories and apply business rules.
-
-Why:
-Keeps business logic centralized and prevents API handlers from becoming complex or stateful.
-
-Tradeoff:
-May feel thin initially until business rules grow.
-
-# Use Postgres via Docker for local development
-
-Decision:
-Run Postgres locally using Docker instead of installing it directly on the system.
-
-Why:
-Ensures consistent local setup, mirrors production environments, and avoids system-level conflicts.
-
-Tradeoff:
-Requires basic Docker familiarity.
-
-# Use seed scripts for initial data population
-
-Decision:
-Seed sample data using standalone scripts instead of hardcoding data in APIs or services.
-
-Why:
-Keeps runtime code clean and makes local development and testing repeatable.
-
-Tradeoff:
-Requires maintaining scripts alongside schema changes.
-
-# Keep API layer thin and orchestration-only
+### Keep API layer thin
 
 Decision:
 Limit API handlers to request parsing, dependency wiring, and response formatting.
 
 Why:
-Maintains clear separation of concerns and keeps HTTP as a transport layer only.
+Maintains separation of concerns and prevents HTTP handlers from accumulating business logic.
 
 Tradeoff:
-More indirection compared to monolithic handlers.
+Adds indirection compared to monolithic handlers.
 
-# Centralized SQLAlchemy model registration
+---
+
+## Data & Persistence
+
+### Use SQLAlchemy ORM with PostgreSQL
 
 Decision:
-Register all ORM models via a single `app.models` import before metadata creation.
+Use SQLAlchemy ORM for database interaction with PostgreSQL.
 
 Why:
-SQLAlchemy only creates tables it knows about at runtime; centralized imports ensure foreign keys resolve correctly.
+Provides a mature abstraction, strong ecosystem support, and clean session handling.
 
 Tradeoff:
-Requires maintaining a central model registry file.
+Requires understanding ORM patterns and session lifecycle.
 
-# Use Cache-Aside pattern for recommendations
+---
+
+### Use per-request DB sessions via dependency injection
 
 Decision:
-Implement Redis caching using the cache-aside pattern for recommendation reads.
+Provide a session per request using `get_db`.
 
 Why:
-Reduces database load, improves response time, and keeps the read path simple and predictable. Cache-aside allows the application to control when data is refreshed and ensures recommendations are recomputed only when necessary.
+Prevents connection leaks and ensures transactional safety.
 
 Tradeoff:
-Requires explicit cache invalidation and consistency management when underlying data changes.
+Requires correct dependency wiring.
 
-# Invalidate cache on feedback events
+---
+
+### Use repository pattern for data access
 
 Decision:
-Invalidate user recommendation cache when feedback (click, like, purchase) is recorded.
+Encapsulate database queries within repositories.
 
 Why:
-Ensures recommendations reflect the latest user behavior and prevents stale personalization.
+Prevents ORM leakage, improves testability, and localizes data access changes.
+
+Tradeoff:
+Adds abstraction for simple CRUD operations.
+
+---
+
+### Centralize ORM model registration
+
+Decision:
+Import all models via a central registry before metadata creation.
+
+Why:
+Ensures foreign keys resolve and tables are created correctly.
+
+Tradeoff:
+Requires maintaining a central registry.
+
+---
+
+### Use Dockerized Postgres for local development
+
+Decision:
+Run Postgres via Docker for local development.
+
+Why:
+Ensures environment consistency and mirrors production.
+
+Tradeoff:
+Requires basic Docker familiarity.
+
+---
+
+### Use seed scripts for data initialization
+
+Decision:
+Populate sample data via seed scripts.
+
+Why:
+Keeps runtime code clean and ensures repeatable setup.
+
+Tradeoff:
+Scripts must be maintained with schema changes.
+
+---
+
+## Caching & Performance
+
+### Use Cache-Aside pattern with Redis
+
+Decision:
+Implement Redis caching using the cache-aside pattern.
+
+Why:
+Improves response latency and reduces database load while keeping refresh control in the application.
+
+Tradeoff:
+Requires explicit invalidation and consistency management.
+
+---
+
+### Invalidate cache on feedback events
+
+Decision:
+Invalidate recommendation cache when user feedback occurs.
+
+Why:
+Ensures personalization reflects latest behavior.
 
 Tradeoff:
 Increases cache churn for highly active users.
 
-# Generate recommendations asynchronously using background tasks
+---
+
+### Graceful cache fallback & Redis failure tolerance
 
 Decision:
-Offload recommendation generation to background tasks instead of processing synchronously within the request.
+Treat Redis as non-critical by falling back to DB or safe responses if cache fails.
 
 Why:
-Prevents blocking API responses, improves responsiveness, and mirrors real-world systems where recommendation computation can be expensive.
+Improves reliability and availability during cache outages.
 
 Tradeoff:
-Adds complexity in job coordination and requires cache/state management for asynchronous results.
+Fallback paths may increase latency.
 
-# Check cache before scheduling recommendation generation
+---
+
+## Recommendation Generation & Consistency
+
+### Generate recommendations asynchronously
 
 Decision:
-Verify Redis cache before scheduling a background generation task.
+Run recommendation generation in background tasks.
 
 Why:
-Prevents unnecessary background jobs when recommendations are already available, reducing compute usage and improving performance.
+Prevents blocking API responses and supports compute-heavy workflows.
 
 Tradeoff:
-Requires reliable cache invalidation to ensure freshness.
+Adds coordination complexity and state management.
 
-# Prevent duplicate recommendation generation using Redis locks
+---
+
+### Check cache before scheduling generation
 
 Decision:
-Use a Redis-based lock (lock:recommendations:{user_id}) to ensure only one background job generates recommendations per user at a time.
+Verify cache before scheduling background jobs.
 
 Why:
-Multiple rapid requests can schedule duplicate background jobs, causing redundant computation, race conditions, and cache churn. A short-lived lock ensures only one job runs.
+Prevents redundant computation and reduces resource usage.
 
 Tradeoff:
-Requires careful TTL configuration to prevent stale locks if a worker crashes.
+Relies on correct cache invalidation for freshness.
 
-# Ensure idempotent recommendation generation
+---
+
+### Prevent duplicate generation using Redis locks
 
 Decision:
-Re-check cache state inside the background worker before recomputing recommendations.
+Use Redis locks (`lock:recommendations:{user_id}`) to ensure only one generation job runs per user.
 
 Why:
-Prevents stale or duplicate background jobs from overwriting fresh results when concurrent requests occur.
+Prevents race conditions, duplicate compute, and cache churn under concurrent requests.
 
 Tradeoff:
-Adds an extra cache lookup but significantly improves correctness and resilience.
+Requires TTL safeguards to prevent stale locks.
 
-# Use stale-while-revalidate strategy for recommendations
+---
+
+### Ensure idempotent generation
 
 Decision:
-Return cached recommendations when available. On cache miss, return the latest stored recommendations while triggering background regeneration.
+Re-check cache state inside workers before recomputation.
 
 Why:
-Ensures users always receive results immediately while freshness improves asynchronously.
+Prevents stale jobs from overwriting fresh results.
 
 Tradeoff:
-Users may briefly see slightly outdated recommendations, and the read path becomes slightly more complex.
+Adds an extra cache lookup.
 
-# Implement liveness and readiness checks for dependency-aware service health
+---
+
+### Use stale-while-revalidate strategy
 
 Decision:
-Expose separate `/health` (liveness) and `/ready` (readiness) endpoints. `/ready` verifies PostgreSQL connectivity (`SELECT 1`) and Redis connectivity (`PING`) before marking the service ready.
+Return cached recommendations immediately and refresh in background when stale.
 
 Why:
-Prevents traffic from reaching instances that cannot access critical dependencies and aligns with Kubernetes readiness/liveness probe best practices for safe deployments and autoscaling.
+Provides fast responses while improving freshness asynchronously.
 
 Tradeoff:
-Adds small latency and dependency checks to the readiness path, and misconfigured dependencies can temporarily keep instances out of rotation.
+Users may briefly see slightly outdated recommendations.
 
-# Add request logging middleware for observability
+---
+
+### Separate read and write paths
 
 Decision:
-Register a custom LoggingMiddleware in app/main.py to log incoming requests, response status, and processing time. Use the centralized logger (get_logger) within services to record key events.
+- GET → serve cached or persisted recommendations  
+- POST → schedule async generation  
 
 Why:
-Provides visibility into API behavior, helps debug issues, and enables performance monitoring without scattering print statements across the codebase.
+Ensures low latency while supporting scalable asynchronous computation.
 
 Tradeoff:
-Adds minor processing overhead and increases log volume, requiring log level control and future log aggregation.
+Data may be briefly stale between refresh cycles.
+
+---
+
+### Enforce structured API responses
+
+Decision:
+Return structured recommendation objects rather than raw IDs.
+
+Why:
+Supports extensibility (scores, explanations) and enforces stable API contracts.
+
+Tradeoff:
+Adds a transformation step before response serialization.
+
+---
+
+## Observability & Reliability
+
+### Health & readiness endpoints
+
+Decision:
+Expose `/health` (liveness) and `/ready` (dependency readiness).
+
+Why:
+Prevents traffic routing to instances lacking critical dependencies and aligns with container orchestration best practices.
+
+Tradeoff:
+Readiness checks add minor overhead.
+
+---
+
+### Request logging middleware
+
+Decision:
+Log request metadata, response status, and latency via centralized middleware.
+
+Why:
+Improves observability and debugging without scattering logs.
+
+Tradeoff:
+Adds minor overhead and increased log volume.
