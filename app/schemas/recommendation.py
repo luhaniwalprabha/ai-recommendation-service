@@ -4,7 +4,7 @@ from typing import List
 
 class RecommendationItem(BaseModel):
     product_id: int
-    reason: str | None = None
+    score: float | None = None
 
 
 class RecommendationResponse(BaseModel):

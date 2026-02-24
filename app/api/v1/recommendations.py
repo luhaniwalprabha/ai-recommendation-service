@@ -7,52 +7,37 @@ from app.services.recommendation_service import RecommendationService
 from app.schemas.recommendation import RecommendationResponse
 from app.domain.recommendation import generate_recommendations
 from app.domain.exceptions import InvalidUserError, RecommendationError
-from app.cache.redis_client import get
+from app.cache.redis_client import get, set
+from app.core.logging import get_logger
 
+logger = get_logger(__name__)
 
 
 router = APIRouter(tags=["recommendations"])
 
 @router.post("")
 def recommend(user_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db),):
-    cache_key = f"recommendations:{user_id}"
-
-    if get(cache_key):
-        return {"status": "ready", "source": "cache"}
-
     product_repo = ProductRepository(db)
     rec_repo = RecommendationRepository(db)
     service = RecommendationService(rec_repo, product_repo)
 
-    # try stale DB result
-    stale = rec_repo.latest_items(user_id)
-
-    if stale:
-        background_tasks.add_task(service.generate, user_id)
-        return {"source": "stale", "items": stale}
-
-    # no stale data → schedule generation
     background_tasks.add_task(service.generate, user_id)
-    return {"status": "processing"}
+
+    return {"status": "scheduled"}
 
 
 
 
 @router.get("/", response_model=RecommendationResponse)
-def get_recommendations(user_id: int, limit: int = 5):
-    try:
-        recommendations = generate_recommendations(user_id=user_id, limit=limit)
+def get_recommendations(user_id: int, db: Session = Depends(get_db),):
 
-        return RecommendationResponse(
-            user_id=user_id,
-            recommendations=recommendations,
-        )
+    product_repo = ProductRepository(db)
+    rec_repo = RecommendationRepository(db)
+    service = RecommendationService(rec_repo, product_repo)
 
-    except InvalidUserError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    items = service.get(user_id)
 
-    except RecommendationError:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to generate recommendations",
-        )
+    return {
+    "user_id": user_id,
+    "recommendations": items
+    }
