@@ -1,9 +1,15 @@
 import redis
 import json
 from app.core.logging import get_logger
+from app.config import settings
 
 logger = get_logger(__name__)
-redis_client = redis.Redis(host="localhost", port=6379, decode_responses=True)
+redis_client = redis.Redis(
+    host=settings.redis_host,
+    port=settings.redis_port,
+    db=settings.redis_db,
+    decode_responses=True,
+)
 
 
 def _key(key: str) -> str:

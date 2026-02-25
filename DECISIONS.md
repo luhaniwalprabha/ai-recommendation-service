@@ -324,3 +324,14 @@ Improves observability and debugging without scattering logs.
 
 Tradeoff:
 Adds minor overhead and increased log volume.
+
+# Implement soft TTL with background refresh
+
+Decision:
+Store generation timestamps in cache and trigger asynchronous refresh when cache becomes stale.
+
+Why:
+Ensures low-latency responses while keeping recommendations fresh without blocking user requests.
+
+Tradeoff:
+Adds complexity in cache payload structure and refresh coordination.
