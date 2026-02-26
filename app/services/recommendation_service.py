@@ -20,25 +20,19 @@ class RecommendationService:
         self.product_repo = product_repo
 
     def get(self, user_id: int):
-        cache_key = f"recommendations:{user_id}"
-        cached = get(cache_key)
+        cached = get(user_id)
 
-        if cached:
+        if cached and isinstance(cached, dict) and "items" in cached:
             age = time.time() - cached["generated_at"]
+            should_refresh = age > settings.recommendation_soft_ttl_seconds
+            return cached["items"], should_refresh
 
-            if age > settings.recommendation_soft_ttl_seconds:
-                logger.info("Cache stale → scheduling refresh")
-                self.generate(user_id)  # fire and forget
-
-            return cached["items"]
-
-        # Fallback to DB
         stale = self.rec_repo.latest_items(user_id)
         if stale:
-            return stale
+            return stale, True
 
-        return []
-
+        return [], True
+        
     def _normalize_items(self, items) -> list[RecommendationItem]:
         normalized: list[RecommendationItem] = []
         for item in items:
@@ -50,14 +44,14 @@ class RecommendationService:
 
     def generate(self, user_id: int):
         logger.info(f"Generating recommendations for user_id={user_id}")
-        cache_key = f"recommendations:{user_id}"
-        lock_key = f"lock:recommendations:{user_id}"
+        # cache_key = f"recommendations:{user_id}"
+        # lock_key = f"lock:recommendations:{user_id}"
 
         # prevent duplicate jobs
-        if get(lock_key):
+        if get(user_id):
             return
 
-        set(lock_key, "1", ttl=120)
+        set(user_id, "1", ttl=120)
 
         try:
             products = self.product_repo.list_products(limit=5)
@@ -71,7 +65,7 @@ class RecommendationService:
                 "generated_at": time.time(),
             }
 
-            set(cache_key, payload, ttl=3600)
+            set(user_id, payload, ttl=3600)
 
         finally:
-            delete(lock_key)
+            delete(user_id)

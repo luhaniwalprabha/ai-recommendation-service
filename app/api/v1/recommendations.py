@@ -42,42 +42,12 @@ def recommend(user_id: int, background_tasks: BackgroundTasks, db: Session = Dep
 
 @router.get("/", response_model=RecommendationResponse)
 def get_recommendations( user_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db),):
-    product_repo = ProductRepository(db)
-    rec_repo = RecommendationRepository(db)
-    service = RecommendationService(rec_repo, product_repo)
+    items, should_refresh = service.get(user_id)
 
-    cache_key = f"recommendations:{user_id}"
-    cached = get(cache_key)
-
-    if cached and isinstance(cached, dict) and "items" in cached:
-        age = time.time() - cached["generated_at"]
-
-        if age > settings.recommendation_soft_ttl_seconds:
-            background_tasks.add_task(service.generate, user_id)
-
-        return {
-            "user_id": user_id,
-            "recommendations": [
-                {"product_id": pid}
-                for pid in cached["items"]
-            ],
-        }
-
-    stale_items = rec_repo.latest_items(user_id)
-    if stale_items:
+    if should_refresh:
         background_tasks.add_task(service.generate, user_id)
-        return {
-            "user_id": user_id,
-            "recommendations": [
-                {"product_id": pid}
-                for pid in stale_items
-            ],
-        }
-
-    # no cache or DB fallback → schedule generation
-    background_tasks.add_task(service.generate, user_id)
 
     return {
         "user_id": user_id,
-        "recommendations": []
+        "recommendations": [{"product_id": pid} for pid in items],
     }
