@@ -5,6 +5,7 @@ from app.core.logging import get_logger
 from app.schemas.recommendation import RecommendationItem
 from app.config import settings
 import time
+from app.ml.recommender import ContentBasedRecommender
 
 logger = get_logger(__name__)
 
@@ -54,8 +55,22 @@ class RecommendationService:
         set(user_id, "1", ttl=120)
 
         try:
-            products = self.product_repo.list_products(limit=5)
-            product_ids = [p.id for p in products]
+            products = self.product_repo.list_products()
+
+            if not products:
+                return
+
+            recommender = ContentBasedRecommender()
+            recommender.fit(products)
+
+            # For demo: use first product as anchor
+            anchor_product = products[0]
+
+            product_ids = recommender.recommend_similar(
+                anchor_product.id,
+                top_k=5
+            )
+
 
             self.rec_repo.save(user_id, product_ids)
             logger.info(f"Refreshed recommendations for user_id={user_id}")

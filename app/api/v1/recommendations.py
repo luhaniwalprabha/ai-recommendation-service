@@ -40,8 +40,12 @@ def recommend(user_id: int, background_tasks: BackgroundTasks, db: Session = Dep
 
 
 
-@router.get("/", response_model=RecommendationResponse)
+@router.get("", response_model=RecommendationResponse)
 def get_recommendations( user_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db),):
+    product_repo = ProductRepository(db)
+    rec_repo = RecommendationRepository(db)
+    service = RecommendationService(rec_repo, product_repo)
+
     items, should_refresh = service.get(user_id)
 
     if should_refresh:

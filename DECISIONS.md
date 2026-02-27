@@ -299,6 +299,60 @@ Adds a transformation step before response serialization.
 
 ---
 
+## ML & Modeling Decisions
+
+### Start with content-based filtering (TF-IDF)
+
+Decision:
+Use a content-based recommender built with TF-IDF vectors.
+
+Why:
+Works with available product metadata, is simple to implement, and gives deterministic baseline recommendations without requiring user interaction history.
+
+Tradeoff:
+Quality depends on metadata quality and does not capture collaborative user behavior.
+
+---
+
+### Use product name + category as feature text
+
+Decision:
+Build recommendation documents by combining `name` and `category` fields per product.
+
+Why:
+Keeps feature engineering lightweight while capturing basic semantic similarity between products.
+
+Tradeoff:
+Ignores richer signals (description, brand, attributes, user behavior) that could improve ranking relevance.
+
+---
+
+### Rank with cosine similarity and exclude anchor item
+
+Decision:
+Use cosine similarity over TF-IDF vectors, remove self-match, and return top-K product IDs.
+
+Why:
+Cosine similarity is a standard, fast baseline for sparse text vectors and straightforward to reason about in early iterations.
+
+Tradeoff:
+Can over-prioritize lexical overlap and may underperform when item similarity requires semantic or behavioral context.
+
+---
+
+### Add local ML bootstrap and smoke-test scripts
+
+Decision:
+Include scripts for seeding representative product data and validating recommender output.
+
+Why:
+Improves iteration speed and enables quick manual verification of ranking behavior during development.
+
+Tradeoff:
+Script-based checks are not a substitute for automated test coverage or offline evaluation metrics.
+
+---
+
 ## Observability & Reliability
 
 ### Health & readiness endpoints
