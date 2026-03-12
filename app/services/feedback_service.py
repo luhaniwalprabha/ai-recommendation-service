@@ -1,5 +1,5 @@
 from app.repositories.feedback_repository import FeedbackRepository
-from app.cache.redis_client import delete
+from app.cache.redis_client import delete as cache_delete
 from app.core.logging import get_logger
 logger = get_logger(__name__)
 
@@ -14,6 +14,6 @@ class FeedbackService:
 
         # Invalidate recommendation cache
         cache_key = f"recommendations:{user_id}"
-        delete(cache_key)
+        cache_delete(cache_key)
 
         return {"status": "feedback recorded", "cache_invalidated": True}

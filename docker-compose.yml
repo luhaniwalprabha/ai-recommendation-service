@@ -19,5 +19,23 @@ services:
     ports:
       - "6379:6379"
 
+  app:
+    build: .
+    container_name: recsys-app
+    depends_on:
+      - db
+      - redis
+    ports:
+      - "8000:8000"
+
+  environment:
+    DATABASE_URL: postgresql://recsys:recsys@db:5432/recsys
+    REDIS_HOST: redis
+    REDIS_PORT: 6379
+    REDIS_DB: 0
+    ENVIRONMENT: local
+    LOG_LEVEL: INFO
+    RECOMMENDATION_SOFT_TTL_SECONDS: 300
+
 volumes:
   postgres_data:

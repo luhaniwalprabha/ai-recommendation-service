@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from app.models.recommendation import Recommendation
+from app.models.feedback import Feedback
 from app.core.logging import get_logger
 logger = get_logger(__name__)
 
@@ -29,3 +30,14 @@ class RecommendationRepository:
             return rec.items
         return None
 
+    def get_user_recent_products(self, user_id: int, limit: int = 5):
+        rows = (
+            self.db.query(Feedback.product_id)
+            .filter(Feedback.user_id == user_id)
+            .filter(Feedback.action.in_(["like", "click"]))
+            .order_by(Feedback.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+
+        return [r.product_id for r in rows]

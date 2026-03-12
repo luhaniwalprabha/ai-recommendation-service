@@ -1,7 +1,6 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from app.config import settings
 
-DATABASE_URL = "postgresql://recsys:recsys@localhost:5432/recsys"
-
-engine = create_engine(DATABASE_URL, echo=True)
+engine = create_engine(settings.database_url, echo=settings.environment == "local")
 SessionLocal = sessionmaker(bind=engine)
