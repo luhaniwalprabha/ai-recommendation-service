@@ -2,11 +2,12 @@
 __pycache__/
 *.pyc
 .env
+.env.*
+!.env.example
 .DS_Store
 
 # build artifacts
 build/
 dist/
 *.egg-info/
-Save the file.
-
+.venv
