@@ -15,7 +15,7 @@ from app.cache.redis_client import get as cache_get, set as cache_set, delete as
 from app.core.logging import get_logger
 from app.schemas.recommendation import RecommendationItem
 from app.config import settings
-from app.ml.recommender import ContentBasedRecommender
+
 from app.ml.llm_reranker import LLMReranker
 from app.ml.tfidf_candidate_generator import TfidfCandidateGenerator
 import time
@@ -58,6 +58,40 @@ class RecommendationService:
 
         return [], True
 
+    def _get_anchor_product(self, user_product_ids, products):
+        anchor_product = None
+
+        if user_product_ids:
+            anchor_id = user_product_ids[0]
+            anchor_product = next((p for p in products if p.id == anchor_id), None)
+
+        if anchor_product is None:
+            anchor_product = products[0]
+
+        return anchor_product
+    
+    def _generate_candidates(self, products, anchor_product):
+        candidate_generator = TfidfCandidateGenerator()
+
+        return candidate_generator.generate(
+            products=products,
+            anchor_product_id=anchor_product.id,
+            limit=TOP_CANDIDATES,
+        )
+    
+    def _filter_seen_products(self, candidate_ids, seen_ids):
+        seen = set(seen_ids)
+        filtered_ids = [pid for pid in candidate_ids if pid not in seen]
+
+        if not filtered_ids:
+            return candidate_ids
+
+        return filtered_ids
+
+    def _map_products(self, product_ids, products):
+        product_map = {p.id: p for p in products}
+        return [product_map[pid] for pid in product_ids if pid in product_map]
+
     def generate(self, user_id: int):
         logger.info(f"Generating recommendations for user_id={user_id}")
 
@@ -80,31 +114,15 @@ class RecommendationService:
 
             user_product_ids = self.rec_repo.get_user_recent_products(user_id)
 
-            anchor_product = None
-            if user_product_ids:
-                anchor_id = user_product_ids[0]
-                anchor_product = next((p for p in products if p.id == anchor_id), None)
+            anchor_product = self._get_anchor_product(user_product_ids, products)
 
-            if anchor_product is None:
-                anchor_product = products[0]
+            candidate_ids = self._generate_candidates(products, anchor_product)
 
-            candidate_generator = TfidfCandidateGenerator()
-
-            candidate_ids = candidate_generator.generate(
-                products=products,
-                anchor_product_id=anchor_product.id,
-                limit=TOP_CANDIDATES,
-            )
-            
             # Filter seen products
-            seen = set(user_product_ids)
-            filtered_ids = [pid for pid in candidate_ids if pid not in seen]
-            if not filtered_ids:
-                filtered_ids = candidate_ids  # nothing new - show anyway
+            filtered_ids = self._filter_seen_products(candidate_ids, user_product_ids)
 
             # Map IDs back to Product objects for LLM context
-            product_map = {p.id: p for p in products}
-            candidate_products = [product_map[pid] for pid in filtered_ids if pid in product_map]
+            candidate_products = self._map_products(filtered_ids, products)
 
             # ----------------------------------------------------------------
             # Step 2: LLM re-ranking (only if user has enough feedback history)
