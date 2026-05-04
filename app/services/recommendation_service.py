@@ -17,6 +17,7 @@ from app.schemas.recommendation import RecommendationItem
 from app.config import settings
 from app.ml.recommender import ContentBasedRecommender
 from app.ml.llm_reranker import LLMReranker
+from app.ml.tfidf_candidate_generator import TfidfCandidateGenerator
 import time
 
 logger = get_logger(__name__)
@@ -76,8 +77,6 @@ class RecommendationService:
                 logger.warning(f"No products found - skipping for user_id={user_id}")
                 return
 
-            recommender = ContentBasedRecommender()
-            recommender.fit(products)
 
             user_product_ids = self.rec_repo.get_user_recent_products(user_id)
 
@@ -89,11 +88,14 @@ class RecommendationService:
             if anchor_product is None:
                 anchor_product = products[0]
 
-            candidate_ids = recommender.recommend_similar(
-                anchor_product.id,
-                top_k=TOP_CANDIDATES,
-            )
+            candidate_generator = TfidfCandidateGenerator()
 
+            candidate_ids = candidate_generator.generate(
+                products=products,
+                anchor_product_id=anchor_product.id,
+                limit=TOP_CANDIDATES,
+            )
+            
             # Filter seen products
             seen = set(user_product_ids)
             filtered_ids = [pid for pid in candidate_ids if pid not in seen]
