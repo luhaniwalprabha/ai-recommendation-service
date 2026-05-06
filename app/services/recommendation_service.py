@@ -1,11 +1,3 @@
-"""
-Generation pipeline:
-1. ContentBasedRecommender → top 10 ML candidates
-2. Filter out already-seen products
-3. If user has >= 3 feedback interactions → LLM re-ranks with reasons
-4. Otherwise → use original ML order, no reasons
-5. Save top 5 to DB + Redis cache
-"""
 
 from app.repositories.recommendation_repository import RecommendationRepository
 from app.repositories.product_repository import ProductRepository
@@ -15,7 +7,8 @@ from app.cache.redis_client import get as cache_get, set as cache_set, delete as
 from app.core.logging import get_logger
 from app.schemas.recommendation import RecommendationItem
 from app.config import settings
-
+from app.rag.product_index_builder import ProductIndexBuilder
+from app.ml.vector_candidate_generator import VectorCandidateGenerator
 from app.ml.llm_reranker import LLMReranker
 from app.ml.tfidf_candidate_generator import TfidfCandidateGenerator
 import time
@@ -69,16 +62,38 @@ class RecommendationService:
             anchor_product = products[0]
 
         return anchor_product
+
     
     def _generate_candidates(self, products, anchor_product):
-        candidate_generator = TfidfCandidateGenerator()
+        try:
+            product_index_builder = ProductIndexBuilder()
+            vector_store = product_index_builder.build(products)
 
-        return candidate_generator.generate(
+            candidate_generator = VectorCandidateGenerator(
+                vector_store=vector_store,
+            )
+
+            candidate_ids = candidate_generator.generate(
+                products=products,
+                anchor_product_id=anchor_product.id,
+                limit=TOP_CANDIDATES,
+            )
+
+            if candidate_ids:
+                return candidate_ids
+
+        except Exception as e:
+            logger.exception(f"Vector candidate generation failed: {e}")
+
+        fallback_generator = TfidfCandidateGenerator()
+
+        return fallback_generator.generate(
             products=products,
             anchor_product_id=anchor_product.id,
             limit=TOP_CANDIDATES,
         )
-    
+        
+
     def _filter_seen_products(self, candidate_ids, seen_ids):
         seen = set(seen_ids)
         filtered_ids = [pid for pid in candidate_ids if pid not in seen]
@@ -102,9 +117,7 @@ class RecommendationService:
             return
 
         try:
-            # ----------------------------------------------------------------
-            # Step 1: ML candidate generation
-            # ----------------------------------------------------------------
+           
             products = self.product_repo.list_products(limit=200)
 
             if not products:
@@ -118,15 +131,12 @@ class RecommendationService:
 
             candidate_ids = self._generate_candidates(products, anchor_product)
 
-            # Filter seen products
+        
             filtered_ids = self._filter_seen_products(candidate_ids, user_product_ids)
 
-            # Map IDs back to Product objects for LLM context
+
             candidate_products = self._map_products(filtered_ids, products)
 
-            # ----------------------------------------------------------------
-            # Step 2: LLM re-ranking (only if user has enough feedback history)
-            # ----------------------------------------------------------------
             reranked = False
             final_items: list[dict] = []
 
