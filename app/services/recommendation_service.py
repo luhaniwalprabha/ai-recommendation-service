@@ -11,6 +11,7 @@ from app.rag.product_index_builder import ProductIndexBuilder
 from app.ml.vector_candidate_generator import VectorCandidateGenerator
 from app.ml.llm_reranker import LLMReranker
 from app.ml.tfidf_candidate_generator import TfidfCandidateGenerator
+from app.rag.product_vector_index import ProductVectorIndex
 import time
 
 logger = get_logger(__name__)
@@ -26,11 +27,13 @@ class RecommendationService:
         product_repo: ProductRepository,
         user_repo: UserRepository | None = None,
         feedback_repo: FeedbackRepository | None = None,
+        
     ):
         self.rec_repo = rec_repo
         self.product_repo = product_repo
         self.user_repo = user_repo
         self.feedback_repo = feedback_repo
+        self.product_vector_index = ProductVectorIndex()
 
     def get(self, user_id: int):
         """
@@ -66,8 +69,7 @@ class RecommendationService:
     
     def _generate_candidates(self, products, anchor_product):
         try:
-            product_index_builder = ProductIndexBuilder()
-            vector_store = product_index_builder.build(products)
+            vector_store = self.product_vector_index.build_once(products)
 
             candidate_generator = VectorCandidateGenerator(
                 vector_store=vector_store,

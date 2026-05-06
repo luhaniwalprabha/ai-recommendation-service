@@ -19,18 +19,22 @@ class ProductIndexBuilder:
 
         for product in products:
             text = self.document_builder.build(product)
-            embedding = self.embedding_service.embed_text(text)
 
             documents.append({
                 "id": f"product_{product.id}",
                 "text": text,
-                "embedding": embedding,
                 "metadata": {
                     "product_id": product.id,
                     "category": getattr(product, "category", None),
                     "brand": getattr(product, "brand", None),
                 },
             })
+
+        texts = [doc["text"] for doc in documents]
+        embeddings = self.embedding_service.embed_texts(texts)
+
+        for doc, embedding in zip(documents, embeddings):
+            doc["embedding"] = embedding
 
         self.vector_store.add_documents(documents)
 
