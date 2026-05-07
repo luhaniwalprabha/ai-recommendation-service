@@ -80,7 +80,7 @@ class RecommendationService:
                 anchor_product_id=anchor_product.id,
                 limit=TOP_CANDIDATES,
             )
-
+            
             if candidate_ids:
                 return candidate_ids
 
@@ -94,7 +94,7 @@ class RecommendationService:
             anchor_product_id=anchor_product.id,
             limit=TOP_CANDIDATES,
         )
-        
+
 
     def _filter_seen_products(self, candidate_ids, seen_ids):
         seen = set(seen_ids)
@@ -108,6 +108,17 @@ class RecommendationService:
     def _map_products(self, product_ids, products):
         product_map = {p.id: p for p in products}
         return [product_map[pid] for pid in product_ids if pid in product_map]
+
+    def _evaluate_candidates(self, candidate_products, anchor_product):
+        if not anchor_product:
+            return
+
+        logger.info(f"Anchor product: {anchor_product.id}")
+
+        for p in candidate_products[:5]:
+            logger.info(
+                f"Eval → Anchor {anchor_product.id} vs Candidate {p.id}"
+            )
 
     def generate(self, user_id: int):
         logger.info(f"Generating recommendations for user_id={user_id}")
@@ -132,12 +143,17 @@ class RecommendationService:
             anchor_product = self._get_anchor_product(user_product_ids, products)
 
             candidate_ids = self._generate_candidates(products, anchor_product)
-
+            logger.info(f"Raw candidate IDs: {candidate_ids}")
         
             filtered_ids = self._filter_seen_products(candidate_ids, user_product_ids)
-
+            logger.info(f"Filtered candidate IDs: {filtered_ids}")
 
             candidate_products = self._map_products(filtered_ids, products)
+            logger.info(
+                f"Candidate products: {[p.id for p in candidate_products]}"
+            )
+
+            self._evaluate_candidates(candidate_products, anchor_product)
 
             reranked = False
             final_items: list[dict] = []
@@ -147,6 +163,8 @@ class RecommendationService:
                 raw_feedback = self.feedback_repo.get_recent_with_details(user_id, limit=20)
 
                 reranker = LLMReranker()
+                logger.info(f"LLM received {len(candidate_products)} candidates")
+
                 llm_result = reranker.rerank(
                     candidates=candidate_products,
                     user=user,
@@ -157,12 +175,16 @@ class RecommendationService:
                     final_items = llm_result[:FINAL_COUNT]
                     reranked = True
                     logger.info(f"LLM re-ranking applied for user_id={user_id}")
+                    logger.info(f"LLM returned {len(llm_result)} items")
 
             # Fall back to ML order if LLM skipped or failed
             if not final_items:
                 final_items = [
-                    {"product_id": p.id, "reason": None}
-                    for p in candidate_products[:FINAL_COUNT]
+                    {
+                        "product_id": p.id,
+                        "reason": None,
+                        "source": "vector" if reranked else "ml",
+                    }
                 ]
                 logger.info(f"Using ML order for user_id={user_id} (no LLM re-ranking)")
 

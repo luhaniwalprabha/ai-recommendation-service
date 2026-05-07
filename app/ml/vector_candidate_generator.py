@@ -1,5 +1,7 @@
 from app.ml.candidate_generator import CandidateGenerator
 from app.rag.embedding_service import EmbeddingService
+import logging
+logger = logging.getLogger(__name__)
 
 
 class VectorCandidateGenerator(CandidateGenerator):
@@ -17,9 +19,16 @@ class VectorCandidateGenerator(CandidateGenerator):
         query = self._build_query(anchor_product)
         query_embedding = self.embedding_service.embed_text(query)
 
+        logger.info(f"Vector search query: {query}")
         results = self.vector_store.search_by_embedding(
             query_embedding=query_embedding,
             top_k=limit,
+        )
+        logger.info(f"Vector search returned {len(results)} results")
+        
+        for r in results[:5]:
+        logger.info(
+            f"Candidate product_id={r['metadata']['product_id']} score={r['score']}"
         )
 
         return [
