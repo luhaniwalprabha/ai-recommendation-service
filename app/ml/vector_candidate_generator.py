@@ -27,9 +27,9 @@ class VectorCandidateGenerator(CandidateGenerator):
         logger.info(f"Vector search returned {len(results)} results")
         
         for r in results[:5]:
-        logger.info(
-            f"Candidate product_id={r['metadata']['product_id']} score={r['score']}"
-        )
+            logger.info(
+                f"Candidate product_id={r['metadata']['product_id']} score={r['score']}"
+            )
 
         return [
             result["metadata"]["product_id"]

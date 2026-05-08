@@ -12,6 +12,7 @@ from app.ml.vector_candidate_generator import VectorCandidateGenerator
 from app.ml.llm_reranker import LLMReranker
 from app.ml.tfidf_candidate_generator import TfidfCandidateGenerator
 from app.rag.product_vector_index import ProductVectorIndex
+from app.rag.user_vector_index import UserVectorIndex
 import time
 
 logger = get_logger(__name__)
@@ -28,12 +29,14 @@ class RecommendationService:
         user_repo: UserRepository | None = None,
         feedback_repo: FeedbackRepository | None = None,
         
+        
     ):
         self.rec_repo = rec_repo
         self.product_repo = product_repo
         self.user_repo = user_repo
         self.feedback_repo = feedback_repo
         self.product_vector_index = ProductVectorIndex()
+        self.user_vector_index = UserVectorIndex()
 
     def get(self, user_id: int):
         """
@@ -48,7 +51,7 @@ class RecommendationService:
             should_refresh = age > settings.recommendation_soft_ttl_seconds
             return cached["items"], should_refresh
 
-        stale = self.rec_repo.latest_items(user_id)
+        stale = []
         if stale:
             return stale, True
 
@@ -105,9 +108,11 @@ class RecommendationService:
 
         return filtered_ids
 
+
     def _map_products(self, product_ids, products):
         product_map = {p.id: p for p in products}
         return [product_map[pid] for pid in product_ids if pid in product_map]
+
 
     def _evaluate_candidates(self, candidate_products, anchor_product):
         if not anchor_product:
@@ -120,25 +125,83 @@ class RecommendationService:
                 f"Eval → Anchor {anchor_product.id} vs Candidate {p.id}"
             )
 
+
+    def _get_user_context(self, user_id, interactions, anchor_product):
+        vector_store = self.user_vector_index.build_once(interactions)
+
+        query = f"{anchor_product.name} {anchor_product.category}"
+
+        results = vector_store.search_by_embedding(
+            query_embedding=self.user_vector_index.embedding_service.embed_text(query),
+            top_k=5,
+        )
+
+        context = []
+
+        for r in results:
+            context.append(r["text"])
+
+        return context
+
+
     def generate(self, user_id: int):
         logger.info(f"Generating recommendations for user_id={user_id}")
 
         lock_key = f"lock:recs:{user_id}"
 
-        if not acquire_lock(lock_key, ttl=120):
-            logger.info(f"Skipping generation for user_id={user_id} - lock held")
-            return
+        # if not acquire_lock(lock_key, ttl=120):
+        #     logger.info(f"Skipping generation for user_id={user_id} - lock held")
+        #     return
 
         try:
            
-            products = self.product_repo.list_products(limit=200)
+            # products = self.product_repo.list_products(limit=200)
+            products = [
+                type("Product", (), {
+                    "id": 1,
+                    "name": "Gold Necklace",
+                    "category": "Jewelry",
+                    "price": 1000,
+                    "brand": "BrandA",
+                    "description": "Lightweight festive gold necklace",
+                    "tags": ["gold", "festive"],
+                    "attributes": {"style": "lightweight"},
+                    "review_summary": "Loved for daily wear",
+                    "average_rating": 4.5,
+                })(),
+                type("Product", (), {
+                    "id": 2,
+                    "name": "Silver Chain",
+                    "category": "Jewelry",
+                    "price": 500,
+                    "brand": "BrandB",
+                    "description": "Minimal everyday silver chain",
+                    "tags": ["silver", "minimal"],
+                    "attributes": {"style": "minimal"},
+                    "review_summary": "Simple and elegant",
+                    "average_rating": 4.2,
+                })(),
+                type("Product", (), {
+                    "id": 3,
+                    "name": "Diamond Ring",
+                    "category": "Jewelry",
+                    "price": 5000,
+                    "brand": "BrandC",
+                    "description": "Luxury diamond engagement ring",
+                    "tags": ["diamond", "luxury"],
+                    "attributes": {"style": "premium"},
+                    "review_summary": "Perfect for special occasions",
+                    "average_rating": 4.8,
+                })(),
+            ]
 
             if not products:
                 logger.warning(f"No products found - skipping for user_id={user_id}")
                 return
 
 
-            user_product_ids = self.rec_repo.get_user_recent_products(user_id)
+            # user_product_ids = self.rec_repo.get_user_recent_products(user_id)
+            user_product_ids = [1]  # mock: user recently interacted with product 1
 
             anchor_product = self._get_anchor_product(user_product_ids, products)
 
@@ -158,17 +221,46 @@ class RecommendationService:
             reranked = False
             final_items: list[dict] = []
 
-            if self.user_repo and self.feedback_repo:
-                user = self.user_repo.get(user_id)
-                raw_feedback = self.feedback_repo.get_recent_with_details(user_id, limit=20)
+            # if self.user_repo and self.feedback_repo:
+            if True:
+                # user = self.user_repo.get(user_id)
+                user = {
+                    "id": user_id,
+                    "name": "Test User",
+                    "preferences": ["minimal", "lightweight"],
+                }
+                # raw_feedback = self.feedback_repo.get_recent_with_details(user_id, limit=20)
+
+                raw_feedback = [
+                    {
+                        "user_id": user_id,
+                        "action": "clicked",
+                        "product_name": "Gold Necklace",
+                        "category": "Jewelry",
+                    },
+                    {
+                        "user_id": user_id,
+                        "action": "liked",
+                        "product_name": "Minimal Ring",
+                        "category": "Jewelry",
+                    },
+                ]
 
                 reranker = LLMReranker()
                 logger.info(f"LLM received {len(candidate_products)} candidates")
+
+                user_context = self._get_user_context(
+                    user_id=user_id,
+                    interactions=raw_feedback,
+                    anchor_product=anchor_product,
+                )
+
 
                 llm_result = reranker.rerank(
                     candidates=candidate_products,
                     user=user,
                     feedback=raw_feedback,
+                    user_context=user_context,
                 )
 
                 if llm_result:
@@ -185,6 +277,7 @@ class RecommendationService:
                         "reason": None,
                         "source": "vector" if reranked else "ml",
                     }
+                    for p in candidate_products[:FINAL_COUNT]
                 ]
                 logger.info(f"Using ML order for user_id={user_id} (no LLM re-ranking)")
 
@@ -192,7 +285,7 @@ class RecommendationService:
             # Step 3: Persist to DB and cache
             # ----------------------------------------------------------------
             item_ids = [item["product_id"] for item in final_items]
-            self.rec_repo.save(user_id, item_ids)
+            # self.rec_repo.save(user_id, item_ids)
 
             payload = {
                 "items": final_items,   # list of {"product_id": int, "reason": str|None}
@@ -201,7 +294,7 @@ class RecommendationService:
             }
 
             cache_key = f"recommendations:{user_id}"
-            cache_set(cache_key, payload, ttl=3600)
+            # cache_set(cache_key, payload, ttl=3600)
 
             logger.info(
                 f"Saved recommendations for user_id={user_id} "

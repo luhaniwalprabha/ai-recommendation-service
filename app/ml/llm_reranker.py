@@ -37,6 +37,7 @@ class LLMReranker:
         candidates: list,
         user,
         feedback: list[dict],
+        user_context: list[str] | None = None,
     ) -> list[dict] | None:
 
         # Only re-rank when user has enough history for the LLM to reason about
@@ -51,7 +52,13 @@ class LLMReranker:
             logger.info("Skipping LLM re-rank — OPENAI_API_KEY is not set")
             return None
 
-        prompt = self._build_prompt(candidates, user, feedback)
+       
+        prompt = self._build_prompt(
+                    candidates=candidates,
+                    user=user,
+                    feedback=feedback,
+                    user_context=user_context,
+                )
 
         try:
             client = OpenAI(api_key=settings.openai_api_key)
@@ -88,40 +95,29 @@ class LLMReranker:
             logger.warning(f"Unexpected error during LLM re-ranking, falling back: {e}")
             return None
 
-    def _build_prompt(self, candidates: list, user, feedback: list[dict]) -> str:
-        """Build a concise, information-dense prompt for GPT-4."""
+    def _build_prompt(self, candidates: list, user, feedback: list[dict], user_context: list[str] | None = None,) -> str:
+        prompt = "User profile:\n"
+        prompt += f"{user}\n\n"
 
-        # Format user profile
-        interests = user.interests if isinstance(user.interests, list) else []
-        user_profile = (
-            f"Age: {user.age}, Gender: {user.gender}, "
-            f"Interests: {', '.join(interests) if interests else 'unknown'}"
-        )
+        prompt += "Recent feedback:\n"
+        for item in feedback:
+            prompt += f"- {item}\n"
 
-        # Format recent feedback (liked/clicked = positive signal, dismiss = negative)
-        feedback_lines = "\n".join(
-            f"  - {f['product_name']} ({f['category']}, ₹{f['price']}) → {f['action']}"
-            for f in feedback[-10:]  # cap at last 10 to keep prompt short
-        )
+        if user_context:
+            prompt += "\nRelevant retrieved user history:\n"
+            for context in user_context:
+                prompt += f"- {context}\n"
 
-        # Format candidates
-        candidate_lines = "\n".join(
-            f"  - product_id={p.id}: {p.name} ({p.category}, ₹{p.price})"
-            for p in candidates
-        )
+        prompt += "\nCandidate products:\n"
+        for product in candidates:
+            prompt += (
+                f"- Product ID: {product.id}, "
+                f"Name: {product.name}, "
+                f"Category: {getattr(product, 'category', None)}, "
+                f"Description: {getattr(product, 'description', None)}\n"
+            )
 
-        return f"""User Profile:
-{user_profile}
-
-Recent Interactions:
-{feedback_lines}
-
-Candidate Products to Re-rank:
-{candidate_lines}
-
-Return a JSON array of all candidates re-ranked by relevance to this user.
-Each item: {{"product_id": <int>, "reason": "<max 20 words why this suits the user>"}}
-"""
+        return prompt
 
     def _parse_response(self, raw: str, candidates: list) -> list[dict]:
         """

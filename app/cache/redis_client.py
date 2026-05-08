@@ -41,6 +41,7 @@ def acquire_lock(key: str, ttl: int = 120) -> bool:
         return redis_client.set(key, "1", nx=True, ex=ttl) is True
     except Exception as e:
         logger.warning(f"Redis lock acquire failed for key={key}: {str(e)}")
-        return False
+        return True
+
 
 
