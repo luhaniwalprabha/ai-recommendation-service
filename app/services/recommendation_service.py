@@ -13,6 +13,7 @@ from app.ml.llm_reranker import LLMReranker
 from app.ml.tfidf_candidate_generator import TfidfCandidateGenerator
 from app.rag.product_vector_index import ProductVectorIndex
 from app.rag.user_vector_index import UserVectorIndex
+from app.ml.hybrid_ranker import HybridRanker
 import time
 
 logger = get_logger(__name__)
@@ -212,8 +213,19 @@ class RecommendationService:
             logger.info(f"Filtered candidate IDs: {filtered_ids}")
 
             candidate_products = self._map_products(filtered_ids, products)
+            user_preferences = ["minimal", "lightweight"]
+
+            hybrid_ranker = HybridRanker()
+
+            candidate_products = hybrid_ranker.rank(
+                products=candidate_products,
+                user_context=[],
+                user_preferences=user_preferences,
+                limit=TOP_CANDIDATES,
+            )
+
             logger.info(
-                f"Candidate products: {[p.id for p in candidate_products]}"
+                f"Hybrid ranked candidate products: {[p.id for p in candidate_products]}"
             )
 
             self._evaluate_candidates(candidate_products, anchor_product)
