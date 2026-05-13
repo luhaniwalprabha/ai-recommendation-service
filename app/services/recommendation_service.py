@@ -14,6 +14,12 @@ from app.ml.tfidf_candidate_generator import TfidfCandidateGenerator
 from app.rag.product_vector_index import ProductVectorIndex
 from app.rag.user_vector_index import UserVectorIndex
 from app.ml.hybrid_ranker import HybridRanker
+from app.dev.dev_data import (
+    get_dev_products,
+    get_dev_user_product_ids,
+    get_dev_user,
+    get_dev_feedback,
+)
 import time
 
 logger = get_logger(__name__)
@@ -29,8 +35,8 @@ class RecommendationService:
         product_repo: ProductRepository,
         user_repo: UserRepository | None = None,
         feedback_repo: FeedbackRepository | None = None,
-        
-        
+        debug: bool = False,
+        use_dev_data: bool = False,
     ):
         self.rec_repo = rec_repo
         self.product_repo = product_repo
@@ -38,6 +44,8 @@ class RecommendationService:
         self.feedback_repo = feedback_repo
         self.product_vector_index = ProductVectorIndex()
         self.user_vector_index = UserVectorIndex()
+        self.debug = debug
+        self.use_dev_data = use_dev_data
 
     def get(self, user_id: int):
         """
@@ -150,59 +158,28 @@ class RecommendationService:
 
         lock_key = f"lock:recs:{user_id}"
 
-        # if not acquire_lock(lock_key, ttl=120):
-        #     logger.info(f"Skipping generation for user_id={user_id} - lock held")
-        #     return
+        if not self.use_dev_data:
+            if not acquire_lock(lock_key, ttl=120):
+                logger.info(f"Skipping generation for user_id={user_id} - lock held")
+                return
 
         try:
            
             # products = self.product_repo.list_products(limit=200)
-            products = [
-                type("Product", (), {
-                    "id": 1,
-                    "name": "Gold Necklace",
-                    "category": "Jewelry",
-                    "price": 1000,
-                    "brand": "BrandA",
-                    "description": "Lightweight festive gold necklace",
-                    "tags": ["gold", "festive"],
-                    "attributes": {"style": "lightweight"},
-                    "review_summary": "Loved for daily wear",
-                    "average_rating": 4.5,
-                })(),
-                type("Product", (), {
-                    "id": 2,
-                    "name": "Silver Chain",
-                    "category": "Jewelry",
-                    "price": 500,
-                    "brand": "BrandB",
-                    "description": "Minimal everyday silver chain",
-                    "tags": ["silver", "minimal"],
-                    "attributes": {"style": "minimal"},
-                    "review_summary": "Simple and elegant",
-                    "average_rating": 4.2,
-                })(),
-                type("Product", (), {
-                    "id": 3,
-                    "name": "Diamond Ring",
-                    "category": "Jewelry",
-                    "price": 5000,
-                    "brand": "BrandC",
-                    "description": "Luxury diamond engagement ring",
-                    "tags": ["diamond", "luxury"],
-                    "attributes": {"style": "premium"},
-                    "review_summary": "Perfect for special occasions",
-                    "average_rating": 4.8,
-                })(),
-            ]
+            if self.use_dev_data:
+                products = get_dev_products()
+            else:
+                products = self.product_repo.list_products(limit=200)
 
             if not products:
                 logger.warning(f"No products found - skipping for user_id={user_id}")
                 return
 
 
-            # user_product_ids = self.rec_repo.get_user_recent_products(user_id)
-            user_product_ids = [1]  # mock: user recently interacted with product 1
+            if self.use_dev_data:
+                user_product_ids = get_dev_user_product_ids()
+            else:
+                user_product_ids = self.rec_repo.get_user_recent_products(user_id)
 
             anchor_product = self._get_anchor_product(user_product_ids, products)
 
@@ -233,53 +210,35 @@ class RecommendationService:
             reranked = False
             final_items: list[dict] = []
 
-            # if self.user_repo and self.feedback_repo:
-            if True:
-                # user = self.user_repo.get(user_id)
-                user = {
-                    "id": user_id,
-                    "name": "Test User",
-                    "preferences": ["minimal", "lightweight"],
-                }
-                # raw_feedback = self.feedback_repo.get_recent_with_details(user_id, limit=20)
+            if self.use_dev_data:
+                user = get_dev_user(user_id)
+                raw_feedback = get_dev_feedback(user_id)
+            else:
+                user = self.user_repo.get(user_id)
+                raw_feedback = self.feedback_repo.get_recent_with_details(user_id, limit=20)
 
-                raw_feedback = [
-                    {
-                        "user_id": user_id,
-                        "action": "clicked",
-                        "product_name": "Gold Necklace",
-                        "category": "Jewelry",
-                    },
-                    {
-                        "user_id": user_id,
-                        "action": "liked",
-                        "product_name": "Minimal Ring",
-                        "category": "Jewelry",
-                    },
-                ]
+            reranker = LLMReranker()
+            logger.info(f"LLM received {len(candidate_products)} candidates")
 
-                reranker = LLMReranker()
-                logger.info(f"LLM received {len(candidate_products)} candidates")
-
-                user_context = self._get_user_context(
-                    user_id=user_id,
-                    interactions=raw_feedback,
-                    anchor_product=anchor_product,
-                )
+            user_context = self._get_user_context(
+                user_id=user_id,
+                interactions=raw_feedback,
+                anchor_product=anchor_product,
+            )
 
 
-                llm_result = reranker.rerank(
-                    candidates=candidate_products,
-                    user=user,
-                    feedback=raw_feedback,
-                    user_context=user_context,
-                )
+            llm_result = reranker.rerank(
+                candidates=candidate_products,
+                user=user,
+                feedback=raw_feedback,
+                user_context=user_context,
+            )
 
-                if llm_result:
-                    final_items = llm_result[:FINAL_COUNT]
-                    reranked = True
-                    logger.info(f"LLM re-ranking applied for user_id={user_id}")
-                    logger.info(f"LLM returned {len(llm_result)} items")
+            if llm_result:
+                final_items = llm_result[:FINAL_COUNT]
+                reranked = True
+                logger.info(f"LLM re-ranking applied for user_id={user_id}")
+                logger.info(f"LLM returned {len(llm_result)} items")
 
             # Fall back to ML order if LLM skipped or failed
             if not final_items:
@@ -293,11 +252,10 @@ class RecommendationService:
                 ]
                 logger.info(f"Using ML order for user_id={user_id} (no LLM re-ranking)")
 
-            # ----------------------------------------------------------------
-            # Step 3: Persist to DB and cache
-            # ----------------------------------------------------------------
+        
             item_ids = [item["product_id"] for item in final_items]
-            # self.rec_repo.save(user_id, item_ids)
+            if not self.use_dev_data:
+                self.rec_repo.save(user_id, item_ids)
 
             payload = {
                 "items": final_items,   # list of {"product_id": int, "reason": str|None}
@@ -306,7 +264,8 @@ class RecommendationService:
             }
 
             cache_key = f"recommendations:{user_id}"
-            # cache_set(cache_key, payload, ttl=3600)
+            if not self.use_dev_data:
+                cache_set(cache_key, payload, ttl=3600)
 
             logger.info(
                 f"Saved recommendations for user_id={user_id} "
@@ -314,7 +273,8 @@ class RecommendationService:
             )
 
         finally:
-            cache_delete(lock_key)
+            if not self.use_dev_data:
+                cache_delete(lock_key)
 
     def _normalize_items(self, items) -> list[RecommendationItem]:
         normalized: list[RecommendationItem] = []

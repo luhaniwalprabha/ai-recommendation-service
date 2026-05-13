@@ -21,6 +21,8 @@ def _build_service(db: Session) -> RecommendationService:
         product_repo=ProductRepository(db),
         user_repo=UserRepository(db),
         feedback_repo=FeedbackRepository(db),
+        debug=True,
+        use_dev_data=True,
     )
 
 
