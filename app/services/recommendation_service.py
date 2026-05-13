@@ -7,7 +7,6 @@ from app.cache.redis_client import get as cache_get, set as cache_set, delete as
 from app.core.logging import get_logger
 from app.schemas.recommendation import RecommendationItem
 from app.config import settings
-from app.rag.product_index_builder import ProductIndexBuilder
 from app.ml.vector_candidate_generator import VectorCandidateGenerator
 from app.ml.llm_reranker import LLMReranker
 from app.ml.tfidf_candidate_generator import TfidfCandidateGenerator
@@ -20,6 +19,7 @@ from app.dev.dev_data import (
     get_dev_user,
     get_dev_feedback,
 )
+from app.ml.explanation_generator import ExplanationGenerator
 import time
 
 logger = get_logger(__name__)
@@ -52,8 +52,15 @@ class RecommendationService:
         Returns (items, should_refresh) where items is a list of dicts:
         [{"product_id": int, "reason": str | None}, ...]
         """
+        if self.use_dev_data:
+            return [], True
+
+        if self.use_dev_data:
+            return [], True
+
         cache_key = f"recommendations:{user_id}"
         cached = cache_get(cache_key)
+        
 
         if cached and isinstance(cached, dict) and "items" in cached:
             age = time.time() - cached["generated_at"]
@@ -136,6 +143,8 @@ class RecommendationService:
 
 
     def _get_user_context(self, user_id, interactions, anchor_product):
+        if not interactions:
+            return []
         vector_store = self.user_vector_index.build_once(interactions)
 
         query = f"{anchor_product.name} {anchor_product.category}"
@@ -214,8 +223,12 @@ class RecommendationService:
                 user = get_dev_user(user_id)
                 raw_feedback = get_dev_feedback(user_id)
             else:
-                user = self.user_repo.get(user_id)
-                raw_feedback = self.feedback_repo.get_recent_with_details(user_id, limit=20)
+                if self.user_repo and self.feedback_repo:
+                    user = self.user_repo.get(user_id)
+                    raw_feedback = self.feedback_repo.get_recent_with_details(user_id, limit=20)
+                else:
+                    user = None
+                    raw_feedback = []
 
             reranker = LLMReranker()
             logger.info(f"LLM received {len(candidate_products)} candidates")
@@ -242,15 +255,19 @@ class RecommendationService:
 
             # Fall back to ML order if LLM skipped or failed
             if not final_items:
+                explanation_generator = ExplanationGenerator()
                 final_items = [
                     {
                         "product_id": p.id,
-                        "reason": None,
-                        "source": "vector" if reranked else "ml",
+                        "reason": explanation_generator.generate(
+                            product=p,
+                            user_preferences=user_preferences,
+                            user_context=user_context if "user_context" in locals() else [],
+                        ),
+                        "source": "vector_fallback",
                     }
                     for p in candidate_products[:FINAL_COUNT]
                 ]
-                logger.info(f"Using ML order for user_id={user_id} (no LLM re-ranking)")
 
         
             item_ids = [item["product_id"] for item in final_items]
