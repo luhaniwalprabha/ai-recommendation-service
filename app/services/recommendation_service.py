@@ -162,7 +162,8 @@ class RecommendationService:
         return context
 
 
-    def generate(self, user_id: int):
+    def generate(self, user_id: int, debug_mode: bool = False):
+        debug_data = {}
         logger.info(f"Generating recommendations for user_id={user_id}")
 
         lock_key = f"lock:recs:{user_id}"
@@ -191,11 +192,14 @@ class RecommendationService:
                 user_product_ids = self.rec_repo.get_user_recent_products(user_id)
 
             anchor_product = self._get_anchor_product(user_product_ids, products)
+            debug_data["anchor_product_id"] = anchor_product.id
 
             candidate_ids = self._generate_candidates(products, anchor_product)
+            debug_data["raw_candidate_ids"] = candidate_ids
             logger.info(f"Raw candidate IDs: {candidate_ids}")
         
             filtered_ids = self._filter_seen_products(candidate_ids, user_product_ids)
+            debug_data["filtered_ids"] = filtered_ids
             logger.info(f"Filtered candidate IDs: {filtered_ids}")
 
             candidate_products = self._map_products(filtered_ids, products)
@@ -209,6 +213,7 @@ class RecommendationService:
                 user_preferences=user_preferences,
                 limit=TOP_CANDIDATES,
             )
+            debug_data["hybrid_ranked_ids"] = [p.id for p in candidate_products]
 
             logger.info(
                 f"Hybrid ranked candidate products: {[p.id for p in candidate_products]}"
@@ -238,7 +243,7 @@ class RecommendationService:
                 interactions=raw_feedback,
                 anchor_product=anchor_product,
             )
-
+            debug_data["user_context"] = user_context
 
             llm_result = reranker.rerank(
                 candidates=candidate_products,
@@ -268,7 +273,7 @@ class RecommendationService:
                     }
                     for p in candidate_products[:FINAL_COUNT]
                 ]
-
+            debug_data["final_items"] = final_items
         
             item_ids = [item["product_id"] for item in final_items]
             if not self.use_dev_data:
@@ -288,6 +293,10 @@ class RecommendationService:
                 f"Saved recommendations for user_id={user_id} "
                 f"(reranked={reranked}, count={len(final_items)})"
             )
+            if debug_mode:
+                return debug_data
+
+            return final_items
 
         finally:
             if not self.use_dev_data:

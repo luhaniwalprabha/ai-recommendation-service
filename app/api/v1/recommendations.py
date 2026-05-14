@@ -73,3 +73,18 @@ def get_recommendations(
         "recommendations": recommendations,
         "reranked": reranked,
     }
+
+@router.post("/debug")
+def debug_recommendations(user_id: int):
+    service = RecommendationService(
+        rec_repo = RecommendationRepository(db=None),
+        product_repo = ProductRepository(db=None),
+        user_repo=None,
+        feedback_repo=None,
+        debug=True,
+        use_dev_data=True,
+    )
+
+    debug_data = service.generate(user_id=user_id, debug_mode=True)
+
+    return debug_data
