@@ -4,6 +4,7 @@ class HybridRanker:
         products: list,
         user_context: list[str] | None = None,
         user_preferences: list[str] | None = None,
+        return_scores: bool = False,
         limit: int = 10,
     ) -> list:
         user_context = user_context or []
@@ -18,11 +19,29 @@ class HybridRanker:
             score += self._preference_score(product, user_preferences)
             score += self._context_score(product, user_context)
 
-            scored.append((score, product))
+            score_details = {
+                "rating": self._rating_score(product),
+                "preference": self._preference_score(product, user_preferences),
+                "context": self._context_score(product, user_context),
+            }
+
+            total_score = sum(score_details.values())
+
+            scored.append((total_score, product, score_details))
 
         scored.sort(key=lambda item: item[0], reverse=True)
+        
+        if return_scores:
+            return [
+                {
+                    "product_id": product.id,
+                    "score": total,
+                    "breakdown": details,
+                }
+                for total, product, details in scored[:limit]
+            ]
 
-        return [product for score, product in scored[:limit]]
+        return [product for total, product, details in scored[:limit]]
 
     def _rating_score(self, product) -> float:
         rating = getattr(product, "average_rating", None)

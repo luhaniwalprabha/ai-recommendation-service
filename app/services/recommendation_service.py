@@ -203,17 +203,23 @@ class RecommendationService:
             logger.info(f"Filtered candidate IDs: {filtered_ids}")
 
             candidate_products = self._map_products(filtered_ids, products)
-            user_preferences = ["minimal", "lightweight"]
+            user_preferences = ["luxury", "premium"]
 
             hybrid_ranker = HybridRanker()
 
-            candidate_products = hybrid_ranker.rank(
+            ranked_with_scores = hybrid_ranker.rank(
                 products=candidate_products,
                 user_context=[],
                 user_preferences=user_preferences,
                 limit=TOP_CANDIDATES,
+                return_scores=True,
             )
-            debug_data["hybrid_ranked_ids"] = [p.id for p in candidate_products]
+
+            candidate_products = [
+                next(p for p in products if p.id == item["product_id"])
+                for item in ranked_with_scores
+            ]
+            debug_data["hybrid_scores"] = ranked_with_scores
 
             logger.info(
                 f"Hybrid ranked candidate products: {[p.id for p in candidate_products]}"
