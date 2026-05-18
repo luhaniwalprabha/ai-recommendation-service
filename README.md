@@ -1,22 +1,57 @@
-# AI Recommendation Service
+# AI Recommendation System with RAG + Hybrid Ranking
 
-Production-style recommendation microservice built with FastAPI.
+## Problem
 
-## Goal
-Demonstrate backend system design, clean architecture, and scalable patterns
-for building a low-latency recommendation service.
+Modern recommendation systems need to combine:
+- user behavior
+- product similarity
+- personalization
+- explainability
 
-## Architecture (high-level)
-- FastAPI (stateless API)
-- PostgreSQL (persistence)
-- Redis (caching)
-- Async workers (event processing)
+This project builds a production-style recommendation engine that combines
+RAG (Retrieval-Augmented Generation) with hybrid ranking and LLM-based reasoning.
 
-## Recommendation Pipeline
-- Stage 1 (ML): content-based similarity (TF-IDF + cosine similarity) produces top candidates.
-- Stage 2 (LLM, optional): if `OPENAI_API_KEY` is set and the user has enough feedback history, the service calls an LLM (`gpt-4o`) to re-rank candidates and attach short reasons.
-- Fallback: if the LLM is skipped or errors (timeouts/quota/etc.), the service returns the ML ranking (no reasons).
 
-## Configuration
-- Secrets: put `OPENAI_API_KEY` in `.env` (not committed) or in runtime environment variables.
-- Template: copy `.env.example` to `.env` and fill values locally.
+## Architecture
+
+The system follows a multi-stage pipeline:
+
+1. Candidate Generation
+   - Vector similarity (embeddings)
+   - TF-IDF fallback
+
+2. Filtering
+   - Removes already seen products
+
+3. Hybrid Ranking
+   - Combines rating, user preferences, and semantic context
+
+4. User RAG
+   - Retrieves relevant user interactions using vector search
+
+5. LLM Re-ranking (optional)
+   - Uses GPT to re-rank candidates with reasoning
+
+6. Fallback Explanation
+   - Generates reasons even when LLM is unavailable
+
+
+## Features
+
+- FastAPI-based recommendation API
+- Product + User RAG
+- Hybrid ranking (rating + preference + context)
+- LLM-based re-ranking (with fallback)
+- Explainable recommendations
+- Debug API for pipeline inspection
+- Dev mode (no DB/Redis required)
+
+
+## Run Locally
+
+```bash
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+
+Test:
+curl -X POST "http://127.0.0.1:8000/v1/recommendations/debug?user_id=101"
